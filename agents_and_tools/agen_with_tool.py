@@ -1,10 +1,11 @@
-import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain.agents import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+from langchain.agents.output_parsers.tools import ToolsAgentOutputParser
 from langchain.agents.format_scratchpad.openai_tools import format_to_openai_tool_messages
+from langchain.agents.format_scratchpad.tools import format_to_tool_messages
 from langchain.agents import AgentExecutor
 
 
@@ -36,11 +37,13 @@ llm_with_tools = ChatGroq(model="mixtral-8x7b-32768").bind_tools(tools=tools)
 agent = (
     {
         "input": lambda x: x["input"],
-        "agent_scratchpad": lambda x: format_to_openai_tool_messages(x["intermediate_steps"])
+        "agent_scratchpad": lambda x: format_to_tool_messages(x["intermediate_steps"])
+        # we can also use format_to_openai_tool_messages() function to convert tool actions to llm executable messages
     }
     | prompt
     | llm_with_tools
-    | OpenAIToolsAgentOutputParser()
+    | ToolsAgentOutputParser()
+    # we can also use OpenAIToolsAgentOutputParser() for parsing llm responses
 )
 
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
@@ -53,6 +56,10 @@ for chunk in agent_executor.stream({"input": "How many letters in the word Munta
 
 
 '''
+Note:
+format_to_openai_tool_messages() and format_to_tool_messages() works as same
+OpenAIToolsAgentOutputParser() and ToolsAgentOutputParser() works as same
+
 Sequential Processing in the Pipeline:
     1. The lambda function defining "input" pulls the user's original input.
     2. After some steps, the agent interacts with the tools, and the results of those tool calls are added to "intermediate_steps".
