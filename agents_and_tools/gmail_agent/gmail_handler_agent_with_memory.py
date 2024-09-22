@@ -82,3 +82,12 @@ while True:
     chat_history.append(HumanMessage(content=query))
     chat_history.append(AIMessage(content=response["output"]))
 
+
+
+
+
+
+"""
+Navigate to GmailToolkit class and you will find the separate tools for performing gmail operations and their required schema to configure the tools for custom
+usecase.
+"""
