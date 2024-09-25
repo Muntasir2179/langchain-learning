@@ -17,6 +17,9 @@ from langchain_core.messages import HumanMessage, AIMessage
 # imports for building agents
 from langchain.agents import AgentExecutor
 
+# custom import
+from utils.helper_functions import text_streamer
+
 
 # loading the environment variable
 load_dotenv()
@@ -79,8 +82,11 @@ while True:
         break
     
     response = agent_executor.invoke(input={"input": query, "chat_history": chat_history})
-    
-    print(f"\nAgent: {response["output"]}\n")
+
+    text_gen = text_streamer(response["output"])
+    for item in text_gen:
+        print(item, end="", flush=True)
+    print()
 
     # appending query and response to the chat history
     chat_history.append(HumanMessage(content=query))
