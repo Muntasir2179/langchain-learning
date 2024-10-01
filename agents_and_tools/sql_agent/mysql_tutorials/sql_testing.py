@@ -275,7 +275,7 @@ if __name__ == "__main__":
     # db.insert_data(phone_number="01234567890", person_name="John Doe", appointment_date="2024-10-01", appointment_time="10:00:00")
     # db.insert_data(phone_number="09876543210", person_name="Jane Smith", appointment_date="2024-10-02", appointment_time="11:00:00", age=25)
 
-    # db.delete_data(phone_number="09876543210")
+    db.delete_data(phone_number="09093439")
     
     # db.update_data(phone_number="09876543210")
     # db.update_data(phone_number="09876543210", person_name="Muntasir Ahmed")
