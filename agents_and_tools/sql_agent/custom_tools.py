@@ -146,24 +146,27 @@ def format_search_result(result):
     formatted_date = appointment_date.strftime("%d-%m-%Y")
     formatted_appointment_time = str(timedelta(seconds=appointment_time.seconds))[:-3]
     formatted_appointment_end_time = str(timedelta(seconds=appointment_end_time.seconds))[:-3]
-    return {
-        "user_id": user_id,
-        "phone_number": phone_number,
-        "person_name": person_name,
-        "age": age,
-        "appointment_date": formatted_date,
-        "appointment_time": formatted_appointment_time,
-        "appointment_end_time": formatted_appointment_end_time
-    }
+    response = (f"\nUser id              : {user_id}\n"
+                f"Person name          : {person_name}\n"
+                f"Phone number         : {phone_number}\n"
+                f"Age                  : {age}\n"
+                f"Appointment date     : {formatted_date}\n"
+                f"Appointment time     : {formatted_appointment_time}\n"
+                f"Appointment end time : {formatted_appointment_end_time}")
+    return response
 
 
 # defining custom insert_data tool
 @tool("insert_data", args_schema=DatabaseInsertSchema, return_direct=True)
 def insert_data(phone_number: str, person_name: str, appointment_date: str, appointment_time: str, age: int = None):
     """This function inserts data into database table. Use this function only when you need to insert some data into the database."""
-    appointment_time_obj = datetime.strptime(appointment_time, "%H:%M:%S")
-    appointment_end_time_obj = appointment_time_obj + timedelta(minutes=5)
-    appointment_end_time = appointment_end_time_obj.strftime("%H:%M:%S")
+
+    try:
+        appointment_time_obj = datetime.strptime(appointment_time, "%H:%M:%S")
+        appointment_end_time_obj = appointment_time_obj + timedelta(minutes=5)
+        appointment_end_time = appointment_end_time_obj.strftime("%H:%M:%S")
+    except Exception as e:
+        return f"{e}"
 
     # SQL query to insert data into the table
     insert_query = f'''
@@ -204,7 +207,7 @@ def search_data(user_id: str):
             conn.close()
     except Exception as e:
         print(f"Error occurred while searching data.\nError Message:\n{e}\n")
-    return result
+    return result if result is not None else f"No such data found with user id {user_id}"
 
 
 # defining custom update_data tool
@@ -259,8 +262,7 @@ def update_data(user_id,
                 try:
                     appointment_time_obj = datetime.strptime(appointment_time[:5], "%H:%M")
                 except ValueError:
-                    print(f"Invalid time format: {appointment_time}")
-                    return
+                    return f"Invalid time format."
 
                 # Appointment end time is 5 minutes later
                 appointment_end_time_obj = appointment_time_obj + timedelta(minutes=5)

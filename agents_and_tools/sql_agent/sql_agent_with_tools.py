@@ -6,15 +6,21 @@ from langchain.agents.format_scratchpad import format_to_tool_messages
 from langchain.agents.output_parsers import ToolsAgentOutputParser
 
 # custom tools and prompt
-from custom_tools import insert_data
+from custom_tools import insert_data, search_data, update_data, delete_data
 from custom_prompts import custom_prompt
 
 
 # loading the environment variable
 load_dotenv()
 
+tools = [
+    insert_data,
+    search_data,
+    update_data,
+    delete_data
+]
 
-llm_with_tool = ChatGroq(model="llama3-groq-70b-8192-tool-use-preview").bind_tools(tools=[insert_data])
+llm_with_tool = ChatGroq(model="llama3-groq-70b-8192-tool-use-preview").bind_tools(tools=tools)
 
 agent = (
     {
@@ -27,7 +33,7 @@ agent = (
     | ToolsAgentOutputParser()
 )
 
-agent_executor = AgentExecutor(agent=agent, tools=[insert_data], verbose=True)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 chat_history = []
 while True:
