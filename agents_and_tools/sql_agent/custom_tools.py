@@ -4,10 +4,26 @@ from datetime import timedelta, datetime
 
 # for custom tool define
 import re
-from typing import Optional, ClassVar
+from typing import Optional, ClassVar, Union
 from pydantic import BaseModel, Field, field_validator
 from langchain.tools import tool
 
+# for error analyzer and response rephraser llm
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
+from custom_prompts import error_prompt, result_rephraser_prompt
+from langchain_core.output_parsers import StrOutputParser
+
+
+load_dotenv()
+
+llm = ChatGroq(model="llama-3.1-70b-versatile")
+
+# creating error generator chain
+error_generator_chain = error_prompt | llm | StrOutputParser()
+
+# result rephraser chain
+result_rephraser_chain = result_rephraser_prompt | llm | StrOutputParser()
 
 
 # establishing connection to the mysql server
@@ -24,8 +40,10 @@ class BaseSchema(BaseModel):
     valid_prefixes: ClassVar[list] = ["013", "017", "018", "019", "015", "016"]
 
     @classmethod
-    def validate_user_id(cls, value:int):
-        return value if value > 0 else "Invalid user id. It should be an integer greater than zero."
+    def validate_user_id(cls, value):
+        if isinstance(value, int) and value > 0:
+            return value
+        return "Invalid user id. It should be a positive integer number."
 
     @classmethod
     def validate_phone_number(cls, value:str):
@@ -35,18 +53,18 @@ class BaseSchema(BaseModel):
         if not re.fullmatch(r'\d{11}', value):
             error_message = error_message + 'It must have exactly 11 digits.'
             has_error = True
-        
+
         # Check if the phone number starts with a valid prefix
         if not any(value.startswith(prefix) for prefix in cls.valid_prefixes):
             error_message = error_message + f' It must start with one of the following prefixes: {cls.valid_prefixes}.'
             has_error = True
-        return error_message if has_error else value
+        return error_generator_chain.invoke(input={"input": error_message}) if has_error else value
     
     @classmethod
     def validate_appointment_date(cls, value:str):
         try:
             datetime.strptime(value, '%Y-%m-%d')
-        except ValueError:
+        except Exception as e:
             return 'Invalid date. It must be in the format YYYY-MM-DD'
         return value
 
@@ -54,15 +72,16 @@ class BaseSchema(BaseModel):
     def validate_appointment_time(cls, value:str):
         try:
             datetime.strptime(value, '%H:%M:%S')
-        except ValueError:
+        except Exception as e:
             return 'Invalid time. It must be in the format H:M:S'
         return value
     
     @classmethod
-    def validate_age(cls, value:int):
-        if value >= 20 and value <= 100:
-            return value
-        return "Invalid age. It should be between 20-100"
+    def validate_age(cls, value):
+        if isinstance(value, int):
+            if value >= 20 and value <= 100:
+                return value
+        return "Invalid age. It should be between 20-100."
 
 
 # schema for insert_data tool
@@ -71,7 +90,7 @@ class DatabaseInsertSchema(BaseSchema):
     person_name: str = Field(description="It should be a valid name")
     appointment_date: str = Field(description="It should be a date with the format YY-MM-DD")
     appointment_time: str = Field(description="It will be a time with the format H:M:S")
-    age: Optional[int] = Field(description="It will be an integer within the range of 20-100", default=None)
+    age: Optional[Union[int, str]] = Field(description="It will be an integer within the range of 20-100", default=None)
     
     @field_validator('phone_number')
     def phone_number_validate(cls, value:str):
@@ -86,21 +105,21 @@ class DatabaseInsertSchema(BaseSchema):
         return cls.validate_appointment_time(value)
     
     @field_validator('age')
-    def age_validate(cls, value:int):
+    def age_validate(cls, value):
         return cls.validate_age(value)
 
 
 # schema for update_data tool
 class DatabaseUpdateSchema(BaseSchema):
-    user_id: int = Field(description="It should be a valid integer number greater than zero.")
+    user_id: Union[int, str] = Field(description="It should be a valid integer number greater than zero.")
     phone_number: Optional[str] = Field(description="Should be a valid phone number of 11 digits and it can only starts with 013, 017, 018, 019, 015, 016", default=None)
     person_name: Optional[str] = Field(description="It should be a valid name", default=None)
     appointment_date: Optional[str] = Field(description="It should be a date with the format YY-MM-DD", default=None)
     appointment_time: Optional[str] = Field(description="It will be a time with the format H:M:S", default=None)
-    age: Optional[int] = Field(description="It will be an integer within the range of 20-100", default=None)
+    age: Optional[Union[int, str]] = Field(description="It will be an integer within the range of 20-100", default=None)
 
     @field_validator('user_id')
-    def user_id_validate(cls, value:int):
+    def user_id_validate(cls, value):
         return cls.validate_user_id(value)
 
     @field_validator('phone_number')
@@ -116,25 +135,25 @@ class DatabaseUpdateSchema(BaseSchema):
         return cls.validate_appointment_time(value)
     
     @field_validator('age')
-    def age_validate(cls, value:int):
+    def age_validate(cls, value):
         return cls.validate_age(value)
 
 
 # schema for search_data tool
 class DatabaseSearchSchema(BaseSchema):
-    user_id: int = Field(description="It should be a valid integer number greater than zero.")
+    user_id: Union[int, str] = Field(description="It should be a valid integer number greater than zero.")
 
     @field_validator('user_id')
-    def user_id_validate(cls, value:int):
+    def user_id_validate(cls, value):
         return cls.validate_user_id(value)
 
 
 # schema for delete_data tool
 class DatabaseDeleteSchema(BaseSchema):
-    user_id: int = Field(description="It should be a valid integer number greater than zero.")
+    user_id: Union[int, str] = Field(description="It should be a valid integer number greater than zero.")
 
     @field_validator('user_id')
-    def user_id_validate(cls, value:int):
+    def user_id_validate(cls, value):
         return cls.validate_user_id(value)
 
 
@@ -153,7 +172,7 @@ def format_search_result(result):
                 f"Appointment date     : {formatted_date}\n"
                 f"Appointment time     : {formatted_appointment_time}\n"
                 f"Appointment end time : {formatted_appointment_end_time}")
-    return response
+    return result_rephraser_chain.invoke(input={"input": response})
 
 
 # defining custom insert_data tool
@@ -166,7 +185,7 @@ def insert_data(phone_number: str, person_name: str, appointment_date: str, appo
         appointment_end_time_obj = appointment_time_obj + timedelta(minutes=5)
         appointment_end_time = appointment_end_time_obj.strftime("%H:%M:%S")
     except Exception as e:
-        return f"{e}"
+        return error_generator_chain.invoke(input={"input": f"{e}"})
 
     # SQL query to insert data into the table
     insert_query = f'''
@@ -187,9 +206,9 @@ def insert_data(phone_number: str, person_name: str, appointment_date: str, appo
         if conn.is_connected():
             cursor.close()
             conn.close()
-        return f"Data inserted successfully into the table. Your ID number is {current_user_id}"
+        return f"Your appointment request have been posted. Your ID number is {current_user_id}."
     except Exception as e:
-        return f"Error occurred during insertion.\nError message:\n{e}"
+        return error_generator_chain.invoke(input={"input": f"{e}"})
 
 
 # defining custom search_data tool
@@ -205,9 +224,13 @@ def search_data(user_id: str):
         if conn.is_connected():
             cursor.close()
             conn.close()
+        
+        if isinstance(user_id, str):
+            return user_id   # It will be an error message rather than user id
+        return result if result is not None else f"No appointment booked with user id {user_id}."
     except Exception as e:
-        print(f"Error occurred while searching data.\nError Message:\n{e}\n")
-    return result if result is not None else f"No such data found with user id {user_id}"
+        return error_generator_chain.invoke(input={"input": f"{e}"})
+    
 
 
 # defining custom update_data tool
@@ -261,8 +284,8 @@ def update_data(user_id,
                 # Handle both 'HH:MM' and 'HH:MM:SS' formats by slicing to 'HH:MM'
                 try:
                     appointment_time_obj = datetime.strptime(appointment_time[:5], "%H:%M")
-                except ValueError:
-                    return f"Invalid time format."
+                except Exception as e:
+                    return error_generator_chain.invoke(input={"input": f"{e}"})
 
                 # Appointment end time is 5 minutes later
                 appointment_end_time_obj = appointment_time_obj + timedelta(minutes=5)
@@ -281,18 +304,25 @@ def update_data(user_id,
                 update_values.append(user_id)  # Add the phone_number to the end for the WHERE clause
                 cursor.execute(update_query, tuple(update_values))
                 conn.commit()
+
+                # fetch the updated result
+                cursor.execute(search_query, (user_id,))
+                updated_result = cursor.fetchone()
+
+                if conn.is_connected():
+                    cursor.close()
+                    conn.close()
                 
-                return f"Data for user id --{user_id}-- updated successfully."
+                return ("Your appointment details have been updated.\n"
+                        f"{format_search_result(updated_result)}")
             else:
                 return "No new information provided to update."
         else:
-            return f"No data found for user id {user_id}. Update not performed."
+            if isinstance(user_id, str):
+                return user_id    # it will be an error message rather than user id
+            return f"No appointment details found for user id {user_id}."
     except Exception as e:
-        return f"Error occurred while updating.\nError message:\n{e}\n"
-    finally:
-        if conn.is_connected():
-            cursor.close()
-            conn.close()
+        return error_generator_chain.invoke(input={"input": f"{e}"})
 
 
 # defining custom delete_data tool
@@ -301,8 +331,9 @@ def delete_data(user_id:int):
     """This function takes one argument which is the user id and deletes data with the id. Use this tool when you need to delete any data from the database table."""
     try:
         conn, cursor = get_connection()
-        result = search_data.invoke(input={"user_id": user_id})
-
+        search_query = f"SELECT * FROM mytable WHERE user_id = %s"
+        cursor.execute(search_query, (user_id,))
+        result = cursor.fetchone()   # fetch the search result
         if result:
             delete_query = f"DELETE FROM mytable WHERE user_id = %s"    # sql query for deleting data from table
             cursor.execute(delete_query, (user_id,))
@@ -311,42 +342,45 @@ def delete_data(user_id:int):
             if conn.is_connected():
                 cursor.close()
                 conn.close()
-            return f"Data deleted from the table with user id --{user_id}--\n"
+            return f"Appointment canceled for user id {user_id}."
         else:
-            return f"Data with this user id --{user_id}-- does not exists."
+            if isinstance(user_id, str):
+                return user_id    # It will be an error message rather than user id
+            return f"No appointment details found with the user id {user_id}."
     except Exception as e:
-        return f"Error occurred while deleting data,\nError message:\n{e}\n"
+        print(e)
+        return error_generator_chain.invoke(input={"input": f"{e}"})
 
 
 if __name__ == "__main__":
     # inserting data using tool
     # message = insert_data.invoke(input={
-    #     "person_name": "Tanvir Ahmed",
+    #     "person_name": "Muntasir Ahmed",
     #     "phone_number": "01308457363",
     #     "age": 22,
-    #     "appointment_date": "2024-12-05",
+    #     "appointment_date": "2024-12-02",
     #     "appointment_time": "12:40:00"
     # })
     # print(message)
 
     # searching data using tool
     # search_result = search_data.invoke(input={
-    #     "user_id": 3
+    #     "user_id": 20
     # })
     # print(search_result)
     
     # updating data using tool
     # update_message = update_data.invoke(input={
-    #     "user_id": 1,
+    #     "user_id": 23,
     #     "person_name": "Muntasir Ahmed",
     #     "phone_number": "01308457363",
-    #     "age": 26,
+    #     "age": 29,
     #     "appointment_date": "2024-12-05",
-    #     "appointment_time": "12:40:00"
+    #     "appointment_time": "11:58:00"
     # })
     # print(update_message)
 
     # deleting data using tool
-    message = delete_data.invoke(input={"user_id": 1})
+    message = delete_data.invoke(input={"user_id": 23})
     print(message)
 
