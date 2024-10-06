@@ -71,10 +71,16 @@ class BaseSchema(BaseModel):
     @classmethod
     def validate_appointment_time(cls, value:str):
         try:
-            datetime.strptime(value, '%H:%M:%S')
-        except Exception as e:
-            return 'Invalid time. It must be in the format H:M:S'
-        return value
+            formatted_time = datetime.strptime(value, "%H:%M:%S")
+            formatted_time = formatted_time.strftime("%I:%M:%S")  # 12-hour format with AM/PM
+            return formatted_time
+        except:
+            try:
+                formatted_time = datetime.strptime(value, "%H:%M")
+                formatted_time = formatted_time.strftime("%I:%M:%S")  # 12-hour format with AM/PM
+                return formatted_time
+            except:
+                return 'Invalid time. It must be in H:M:S and 12 hour format.'
     
     @classmethod
     def validate_age(cls, value):
@@ -180,6 +186,7 @@ def format_search_result(result):
 def insert_data(phone_number: str, person_name: str, appointment_date: str, appointment_time: str, age: int = None):
     """This function inserts data into database table. Use this function only when you need to insert some data into the database."""
 
+    # calculating appointment end time
     try:
         appointment_time_obj = datetime.strptime(appointment_time, "%H:%M:%S")
         appointment_end_time_obj = appointment_time_obj + timedelta(minutes=5)
@@ -381,6 +388,7 @@ if __name__ == "__main__":
     # print(update_message)
 
     # deleting data using tool
-    message = delete_data.invoke(input={"user_id": 23})
-    print(message)
+    # message = delete_data.invoke(input={"user_id": 23})
+    # print(message)
 
+    pass
