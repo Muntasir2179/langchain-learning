@@ -1,6 +1,8 @@
 __pycache__
+embedding_model
 .env
-rag/db
+db
+docs
 test.py
 credentials.json
 token.json
